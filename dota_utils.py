@@ -3,7 +3,7 @@ import sys
 import codecs
 import numpy as np
 
-import shapely.geometry as shgeo
+#import shapely.geometry as shgeo
 import os
 import re
 import math
@@ -11,8 +11,7 @@ import math
 """
     some basic functions which are useful for process DOTA data
 """
-classes_name=['1','g2020']
-#classes_name=['person', 'helmet', 'head', 'glove', 'wrongglove', 'clothes', 'wrongclothes', 'operatingbar','powerchecker','badge']
+
 # For DOTA v1.5
 classnames_v1_5 = ['plane', 'baseball-diamond', 'bridge', 'ground-track-field', 'small-vehicle', 'large-vehicle', 'ship', 'tennis-court',
                 'basketball-court', 'storage-tank',  'soccer-ball-field', 'roundabout', 'harbor', 'swimming-pool', 'helicopter', 'container-crane']

@@ -1,24 +1,24 @@
-python train2.py --weights="./weights/yolov5s.pt" --multi-scale --batch-size=48 --image-weights --hyp="./data/hyp.scratch.yaml
 
-# YOLOv5_DOTA_OBB
+# YOLOv5_rotate
 YOLOv5 in DOTA_OBB dataset with CSL_label.(Oriented Object Detection)
 
 
 ## Datasets and pretrained checkpoint
-* `Datasets` : [DOTA](https://link.zhihu.com/?target=http%3A//captain.whu.edu.cn/DOTAweb/)
+* `Datasets` : [DOTA](https://link.zhihu.com/?target=http%3A//captain.whu.edu.cn/DOTAweb/) 
+* `Datasets` : [Chips]-`Not public yet `
 * `Pretrained Checkpoint or Demo Files` : 
     * `train,detect_and_evaluate_demo_files`:  | [Baidu Drive(6666)](https://pan.baidu.com/s/19BGy_UIdk8N-mSjHBMI0QQ). |  [Google Drive](https://drive.google.com/file/d/1MdKTgXQpHFBk_RN9UDSIB42M5e8zQaTP/view?usp=sharing) |
     * `yolov5x.pt`:  | [Baidu Drive(6666)](https://pan.baidu.com/s/1pH6EGKZiIyGtoqUe3F8eWQ). |  [Google Drive](https://drive.google.com/file/d/1hGPB7iOl3EmB2vfm44xMpHJV8hPufHn2/view?usp=sharing) |
     * `yolov5l.pt`:  | [Baidu Drive(6666)](https://pan.baidu.com/s/16is2mx879jk9_4RHwcIgKw). |  [Google Drive](https://drive.google.com/file/d/12ljwafulmAP1i9XsaeYvEnIUd18agJcT/view?usp=sharing) |
     * `yolov5m.pt`:  | [Baidu Drive(6666)](https://pan.baidu.com/s/1ZQoxEB-1mtBAk3A-Rt85-A). |  [Google Drive](https://drive.google.com/file/d/1VSDegIUgTh-fMDIjuwTSQaZ1w5bVx2Vd/view?usp=sharing) |
     * `yolov5s.pt`:  | [Baidu Drive(6666)](https://pan.baidu.com/s/1jm7ijb0a3LVkg8P2bkmJnw). |  [Google Drive](https://drive.google.com/file/d/1ePo6OM8MbxG8nAkZS_Bt7cmnChSlKBmo/view?usp=sharing) |
-
+* `The latest YOLOV5 model weights ` : (https://github.com/ultralytics/yolov5).
 ## Fuction
 * `train.py`.  Train.
 
 * `detect.py`. Detect and visualize the detection result. Get the detection result txt.
 
-* `evaluation.py`.  Merge the detection result and visualize it. Finally evaluate the detector
+* `val.py`.  Finally evaluate the detector
 
 
 
@@ -42,7 +42,7 @@ $   python setup.py build_ext --inplace
 ## Usage Example
 `1.` `'Get Dataset' `
  
-* Split the DOTA_OBB image and labels. Trans DOTA format to YOLO longside format.
+* Split the Chips/DOTA image and labels. Trans DOTA format to YOLO longside format.
 
 * You can refer to  [hukaixuan19970627/DOTA_devkit_YOLO](https://github.com/hukaixuan19970627/DOTA_devkit_YOLO).
 
@@ -75,16 +75,12 @@ python -m torch.distributed.launch --nproc_per_node 4 train.py --sync-bn --devic
 ```
 
 
-
-
 `3.` `'detect.py'` 
     
-* Download the demo files.
-* Then run the demo. Visualize the detection result and get the result txt files.
+* 运行图像分割代码SplitOnlyImage.py，将原图分割存储到：inference/clip_images.
+* 运行检测代码：python detect.py ，将检测结果存储到： inference/detect_images.
+* 运行合并代码：python merge.py ,将合并结果保存到： inference/merge_images.
 
-```
-$  python detect.py
-```
 
 ![detection_result_after_merge](./chips_detection.jpg)
 

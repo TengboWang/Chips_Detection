@@ -1,34 +1,3 @@
-import glob
-import logging
-import math
-import os
-import platform
-import random
-import shutil
-import subprocess
-import time
-from contextlib import contextmanager
-from copy import copy
-from pathlib import Path
-
-import cv2
-import matplotlib
-import matplotlib.pyplot as plt
-import numpy as np
-import torch
-import torch.nn as nn
-import yaml
-from scipy.cluster.vq import kmeans
-from scipy.signal import butter, filtfilt
-from tqdm import tqdm
-
-from utils.google_utils import gsutil_getsize
-from utils.torch_utils import is_parallel, init_torch_seeds
-from shapely.geometry import Polygon, MultiPoint
-
-from utils import polyiou
-import pdb
-
 import argparse
 import logging
 import math
@@ -37,7 +6,6 @@ import random
 import shutil
 import time
 from pathlib import Path
-from matplotlib import pyplot as plt
 
 import numpy as np
 import torch.distributed as dist
@@ -50,7 +18,7 @@ from torch.cuda import amp
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
-#from test_utils.test import test
+
 import test  # import test.py to get mAP after each epoch
 from models.yolo import Model
 from utils.datasets import create_dataloader
@@ -63,44 +31,12 @@ from utils.torch_utils import ModelEMA, select_device, intersect_dicts
 
 logger = logging.getLogger(__name__)
 
-def plot_results_test(start=0, stop=0, bucket='', id=(), labels=(), save_dir=''):
-    # from utils.general import *; plot_results()
-    # Plot training 'results*.txt' as seen in https://github.com/ultralytics/yolov5#reproduce-our-training
-    fig, ax = plt.subplots(2, 6, figsize=(12, 6))
-    ax = ax.ravel()
-    s = ['Box', 'Objectness', 'Classification', 'Angle', 'Total_Loss','Precision', 'Recall',
-         'val Box', 'val Objectness', 'val Classification', 'mAP@0.5', 'mAP@0.5:0.95']
-    if bucket:
-        # os.system('rm -rf storage.googleapis.com')
-        # files = ['https://storage.googleapis.com/%s/results%g.txt' % (bucket, x) for x in id]
-        files = ['results%g.txt' % x for x in id]
-        c = ('gsutil cp ' + '%s ' * len(files) + '.') % tuple('gs://%s/results%g.txt' % (bucket, x) for x in id)
-        os.system(c)
-    else:
-        files = glob.glob(str(Path(save_dir) / 'results*.txt')) + glob.glob('../../Downloads/results*.txt')
-    for fi, f in enumerate(files):
-        try:
-            results = np.loadtxt(f, usecols=[2, 3, 4, 5, 6, 8, 9, 12, 13, 14, 10, 11], ndmin=2).T
-            n = results.shape[1]  # number of rows
-            x = range(start, min(stop, n) if stop else n)
-            for i in range(12):
-                y = results[i, x]
-                if i in [0, 1, 2, 3, 4, 7, 8, 9]:
-                    y[y == 0] = np.nan  # dont show zero loss values
-                    # y /= y[0]  # normalize
-                label = labels[fi] if len(labels) else Path(f).stem
-                ax[i].plot(x, y, marker='.', label=label, linewidth=1, markersize=6)
-                ax[i].set_title(s[i])
-                # if i in [5, 6, 7]:  # share train and val loss y axes
-                #     ax[i].get_shared_y_axes().join(ax[i], ax[i - 5])
-        except Exception as e:
-            print('Warning: Plotting error for %s; %s' % (f, e))
-
-    fig.tight_layout()
-    ax[1].legend()
-    fig.savefig(Path(save_dir) / 'results.png', dpi=200)
 
 def train(hyp, opt, device, tb_writer=None):
+    if(tb_writer == None):
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! no tenserboard !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+    else:
+        print("------------------ with tensorboard------------------")
     logger.info(f'Hyperparameters {hyp}')
     """
     获取记录训练日志的路径:
@@ -149,8 +85,7 @@ def train(hyp, opt, device, tb_writer=None):
     # 获取训练集、测试集图片路径
     train_path = data_dict['train']
     test_path = data_dict['val']
-    print('train_path===============',train_path)
-    print('test_path================',test_path)
+
     # 获取类别数量和类别名字
     # 如果设置了opt.single_cls则为一类
     nc, names = (1, ['item']) if opt.single_cls else (int(data_dict['nc']), data_dict['names'])  # 保存data.yaml中的number classes, names
@@ -369,16 +304,15 @@ def train(hyp, opt, device, tb_writer=None):
          2. dataloader：数据增强，保留了矩形框训练。
     '''
     # Process 0
+    print(f"RANK: ----------{rank}----------")
     if rank in [-1, 0]:
         # local_rank is set to -1. Because only the first process is expected to do evaluation.
         # testloader
         ema.updates = start_epoch * nb // accumulate  # set EMA updates
-        testloader = create_dataloader(test_path, imgsz_test, total_batch_size, gs, opt,
-                                       hyp=hyp, augment=False, cache=opt.cache_images and not opt.notest, rect=True,
-                                       rank=-1, world_size=opt.world_size, workers=opt.workers)[0]  # testloader
-        nb_test=len(testloader)
-        test_img=next(iter(testloader))
-        print('test_img=========================',test_img)
+        # testloader = create_dataloader(test_path, imgsz_test, total_batch_size, gs, opt,
+        #                                hyp=hyp, augment=False, cache=opt.cache_images and not opt.notest, rect=True,
+        #                                rank=-1, world_size=opt.world_size, workers=opt.workers)[0]  # testloader
+
         if not opt.resume:
             labels = np.concatenate(dataset.labels, 0)
             c = torch.tensor(labels[:, 0])  # classes
@@ -387,7 +321,10 @@ def train(hyp, opt, device, tb_writer=None):
             plot_labels(labels, save_dir=log_dir)
             if tb_writer:
                 # tb_writer.add_hparams(hyp, {})  # causes duplicate https://github.com/ultralytics/yolov5/pull/384
+                print("-----------add classes to tb---------------")
                 tb_writer.add_histogram('classes', c, 0)
+            else:
+                print("!!!!!!!!!!!no classes added to tb!!!!!!!!!!!!!!")
 
             # Anchors
             if not opt.noautoanchor:
@@ -437,8 +374,6 @@ def train(hyp, opt, device, tb_writer=None):
     for epoch in range(start_epoch, epochs):  # epoch ------------------------------------------------------------------
         # model设置为训练模式，其中training属性表示BatchNorm与Dropout层在训练阶段和测试阶段中采取的策略不同，通过判断training值来决定前向传播策略
         model.train()
-        #model.val()
-        #model.test()
 
         # Update image weights (optional)
         # 加载图片权重（可选）
@@ -478,8 +413,6 @@ def train(hyp, opt, device, tb_writer=None):
             # tqdm 创建进度条，方便训练时 信息的展示
             pbar = tqdm(pbar, total=nb)  # progress bar
         optimizer.zero_grad()
-
-
         for i, (imgs, targets, paths, _) in pbar:  # batch ------------------------------------------------------------
             '''
             i: batch_index, 第i个batch
@@ -534,13 +467,6 @@ def train(hyp, opt, device, tb_writer=None):
                 # 计算损失，包括分类损失，objectness损失，框的回归损失
                 # loss为总损失值，loss_items为一个元组(lbox, lobj, lcls, langle, loss)
                 loss, loss_items = compute_loss(pred, targets.to(device), model, csl_label_flag=True)  # loss scaled by batch_size
-                ########save loss
-                # save_loss=loss.cuda().data.cpu().numpy()[0]
-                # print('type save_loss',type(save_loss))
-                # f_loss=open('./train_loss.txt',mode='a+')
-                # f_loss.write(str(save_loss)+'\n')
-                # f_loss.close()
-                ########save loss
                 if rank != -1:
                     # 平均不同gpu之间的梯度
                     loss *= opt.world_size  # gradient averaged between devices in DDP mode
@@ -567,9 +493,7 @@ def train(hyp, opt, device, tb_writer=None):
                     '%g/%g' % (epoch, epochs - 1), mem, *mloss, targets.shape[0], imgs.shape[-1])
                 # 进度条显示以上信息
                 pbar.set_description(s)
-                #####################train loss
-                ######################trainn loss
-            
+
                 # Plot
                 # 将前三次迭代batch的标签框在图片上画出来并保存
                 if ni < 3:
@@ -580,9 +504,6 @@ def train(hyp, opt, device, tb_writer=None):
                         # tb_writer.add_graph(model, imgs)  # add model to tensorboard
 
             # end batch ------------------------------------------------------------------------------------------------
-########
-
-#val
 
         # Scheduler
         lr = [x['lr'] for x in optimizer.param_groups]  # for tensorboard
@@ -598,17 +519,16 @@ def train(hyp, opt, device, tb_writer=None):
             final_epoch = epoch + 1 == epochs
             # # 判断该epoch是否为最后一轮
             # if not opt.notest or final_epoch:  # Calculate mAP
-                # 对测试集进行测试，计算mAP等指标
-                # 测试时使用的是EMA模型
-                #testtest
-                # results, maps, times = test.test(opt.data,
-                #                                  batch_size=total_batch_size,
-                #                                  imgsz=imgsz_test,
-                #                                  model=ema.ema,
-                #                                  single_cls=opt.single_cls,
-                #                                  dataloader=testloader,
-                #                                  save_dir=log_dir,
-                #                                  plots=epoch == 0 or final_epoch)  # plot first and last
+            #     # 对测试集进行测试，计算mAP等指标
+            #     # 测试时使用的是EMA模型
+            #     results, maps, times = test.test(opt.data,
+            #                                      batch_size=total_batch_size,
+            #                                      imgsz=imgsz_test,
+            #                                      model=ema.ema,
+            #                                      single_cls=opt.single_cls,
+            #                                      dataloader=testloader,
+            #                                      save_dir=log_dir,
+            #                                      plots=epoch == 0 or final_epoch)  # plot first and last
 
             # Write
             # 将测试指标写入result.txt
@@ -616,82 +536,7 @@ def train(hyp, opt, device, tb_writer=None):
                 f.write(s + '%10.4g' * 8 % results + '\n')  # P, R, mAP@.5, mAP@.5-.95, val_loss(box, obj, cls)
             if len(opt.name) and opt.bucket:
                 os.system('gsutil cp %s gs://%s/results/results%s.txt' % (results_file, opt.bucket, opt.name))
-        ################val
-        val_mloss = torch.zeros(5, device=device)  # mean losses
-        if rank != -1:
-            # DDP模式下打乱数据, ddp.sampler的随机采样数据是基于epoch+seed作为随机种子，
-            # 每次epoch不同，随机种子就不同
-            testloader.sampler.set_epoch(epoch)
-        test_pbar = enumerate(testloader)
-        logger.info(('\n' + '%10s' * 9) % ('Epoch', 'gpu_mem', 'box', 'obj', 'cls', 'angle', 'total', 'targets', 'img_size'))
-        if rank in [-1, 0]:
-            # tqdm 创建进度条，方便训练时 信息的展示
-            test_pbar = tqdm(test_pbar, total=nb_test)  # progress bar   
-        # 初始化训练时打印的平均损失信息
 
-        for i, (imgs, targets, paths, _) in test_pbar:  # batch ------------------------------------------------------------
-            '''
-            i: batch_index, 第i个batch
-            imgs : torch.Size([batch_size, 3, resized_height, resized_weight])
-            targets : torch.Size = (该batch中的目标数量, [该image属于该batch的第几个图片, class, xywh, θ])       
-            paths : List['img1_path','img2_path',......,'img-1_path']  len(paths)=batch_size
-            shapes :  size= batch_size, 不进行mosaic时进行矩形训练时才有值
-            '''
-            # ni计算迭代的次数iteration
-            ni = i + nb * epoch  # number integrated batches (since train start)
-            imgs = imgs.to(device, non_blocking=True).float() / 255.0  # uint8 to float32, 0-255 to 0.0-1.0
-            # Forward
-            # 前向传播
-            with amp.autocast(enabled=cuda):
-                '''
-                训练时返回x
-                x list: [small_forward, medium_forward, large_forward]  eg:small_forward.size=( batch_size, 3种scale框, size1, size2, no)
-                '''
-                pred = model(imgs)  # forward
-                # Loss
-                # 计算损失，包括分类损失，objectness损失，框的回归损失
-                # loss为总损失值，loss_items为一个元组(lbox, lobj, lcls, langle, loss)
-                loss, loss_items = compute_loss(pred, targets.to(device), model, csl_label_flag=True)  # loss scaled by batch_size
-                ########save loss
-                # save_loss=loss.cuda().data.cpu().numpy()[0]
-                # print('type save_loss',type(save_loss))
-                # f_loss=open('./train_loss.txt',mode='a+')
-                # f_loss.write(str(save_loss)+'\n')
-                # f_loss.close()
-                ########save loss
-                if rank != -1:
-                    # 平均不同gpu之间的梯度
-                    loss *= opt.world_size  # gradient averaged between devices in DDP mode
-
-            # Print
-            if rank in [-1, 0]:
-                # mloss  (lbox, lobj, lcls, langle, loss)
-                # 打印显存，进行的轮次，损失，target的数量和图片的size等信息
-                mloss = (mloss * i + loss_items) / (i + 1)  # update mean losses
-                mem = '%.3gG' % (torch.cuda.memory_reserved() / 1E9 if torch.cuda.is_available() else 0)  # (GB)
-                s = ('%10s' * 2 + '%10.4g' * 7) % (
-                    '%g/%g' % (epoch, epochs - 1), mem, *mloss, targets.shape[0], imgs.shape[-1])
-                # 进度条显示以上信息
-                pbar.set_description(s)
-                #####################train loss
-                ######################trainn loss
-        if rank in [-1, 0]:
-            # mAP
-            if ema:
-                # 更新EMA的属性
-                # 添加include的属性
-                ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'gr', 'names', 'stride'])
-            final_epoch = epoch + 1 == epochs
-            val_loss='./test/results.txt'
-            with open(val_loss, 'a') as f:
-                f.write(s + '%10.4g' * 8 % results + '\n')  # P, R, mAP@.5, mAP@.5-.95, val_loss(box, obj, cls)
-            if len(opt.name) and opt.bucket:
-                os.system('gsutil cp %s gs://%s/results/results%s.txt' % (results_file, opt.bucket, opt.name))
-        ################val
-        # val_loss='./val_loss.txt'
-        # with open(val_loss, 'a') as f:
-        #     f.write(s + '%10.4g' * 8 % results + '\n')  # P, R, mAP@.5, mAP@.5-.95, val_loss(box, obj, cls)            
-        ############val
             # Tensorboard
             # 添加指标，损失等信息到tensorboard显示
             if tb_writer:
@@ -752,7 +597,6 @@ def train(hyp, opt, device, tb_writer=None):
         # 可视化results.txt文件
         if not opt.evolve:
             plot_results(save_dir=log_dir)  # save as results.png
-            plot_results_test(save_dir='./test')  # save as results.png
         logger.info('%g epochs completed in %.3f hours.\n' % (epoch - start_epoch + 1, (time.time() - t0) / 3600))
 
     # 释放显存
@@ -790,13 +634,13 @@ if __name__ == '__main__':
         workers:dataloader的最大worker数量
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', type=str, default='./runs/',help='initil weights path')
+    parser.add_argument('--weights', type=str, default='./weights/yolov5m.pt',help='initil weights path')
     parser.add_argument('--cfg', type=str, default='./models/yolov5m.yaml', help='model.yaml path')
     parser.add_argument('--data', type=str, default='data/secure_check.yaml', help='data.yaml path')
     parser.add_argument('--hyp', type=str, default='data/hyp.scratch.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--batch-size', type=int, default=16, help='total batch size for all GPUs')
-    parser.add_argument('--img-size', nargs='+', type=int, default=[1024, 1024], help='[train, test] image sizes')
+    parser.add_argument('--img-size', nargs='+', type=int, default=[640, 640], help='[train, test] image sizes')
     parser.add_argument('--rect', action='store_true', help='rectangular training')
     parser.add_argument('--resume', nargs='?', const=True, default=False, help='resume most recent training')
     parser.add_argument('--nosave', action='store_true', help='only save final checkpoint')
@@ -807,14 +651,14 @@ if __name__ == '__main__':
     parser.add_argument('--cache-images', action='store_true', default=False, help='cache images for faster training')
     parser.add_argument('--image-weights', action='store_true', help='use weighted image selection for training')
     parser.add_argument('--name', default='', help='renames results.txt to results_name.txt if supplied')
-    parser.add_argument('--device', default='0,1', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--multi-scale', action='store_true', help='vary img-size +/- 50%%')
     parser.add_argument('--single-cls', action='store_true', help='train as single-class dataset')
     parser.add_argument('--adam', action='store_true', help='use torch.optim.Adam() optimizer')
     parser.add_argument('--sync-bn', action='store_true', help='use SyncBatchNorm, only available in DDP mode')
     parser.add_argument('--local_rank', type=int, default=-1, help='DDP parameter, do not modify')
     parser.add_argument('--logdir', type=str, default='runs/', help='logging directory')
-    parser.add_argument('--workers', type=int, default=4, help='maximum number of dataloader workers')
+    parser.add_argument('--workers', type=int, default=8, help='maximum number of dataloader workers')#8
     opt = parser.parse_args()
 
     # Set DDP variables
@@ -909,7 +753,7 @@ if __name__ == '__main__':
                 'angle_pw': (1, 0.5, 2.0),
                 'iou_t': (0, 0.1, 0.7),  # IoU training threshold
                 'anchor_t': (1, 2.0, 8.0),  # anchor-multiple threshold
-                'anchors': (2, 2.0, 10.0),  # anchors per output grid (0 to ignore)
+                # 'anchors': (2, 2.0, 10.0),  # anchors per output grid (0 to ignore)
                 'fl_gamma': (0, 0.0, 2.0),  # focal loss gamma (efficientDet default gamma=1.5)
                 'hsv_h': (1, 0.0, 0.1),  # image HSV-Hue augmentation (fraction)
                 'hsv_s': (1, 0.0, 0.9),  # image HSV-Saturation augmentation (fraction)

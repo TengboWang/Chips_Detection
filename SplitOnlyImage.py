@@ -8,7 +8,7 @@ class splitbase():
     def __init__(self,
                  srcpath,
                  dstpath,
-                 gap=100,
+                 gap=150,
                  subsize=1024,
                  ext='.png'):
         self.srcpath = srcpath
@@ -63,6 +63,6 @@ class splitbase():
         for name in imagenames:
             self.SplitSingle(name, rate, self.ext)
 if __name__ == '__main__':
-    split = splitbase(r'example/images',
-                      r'example/imagesSplit')
-    split.splitdata(1)
+    split = splitbase(r'inference/pre_images',
+                      r'inference/clip_images')
+    split.splitdata(0.6)
