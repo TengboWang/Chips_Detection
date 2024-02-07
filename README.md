@@ -60,7 +60,6 @@ $  classid    x_c   y_c   longside   shortside    Θ    Θ∈[0, 180)
 ```
 `WARNING: IMAGE SIZE MUST MEETS 'HEIGHT = WIDTH'`
 
-![label_format_demo](./label_format_demo.png)
 
 `2.` `'train.py'` 
 
